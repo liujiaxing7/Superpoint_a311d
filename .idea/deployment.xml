@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="96 (b7641b86-09b0-4938-b3f9-f6229bca7f51)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/tmp.yj4LqGqswz" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-remote-host" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-1" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+      <paths name="A311d (10594fee-4ae0-4679-a5ac-fb0f4d7780b2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/khadas/ljx/abby2_nbg_unify" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-remote-host" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-1" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-a311d" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+      <paths name="a311d_super">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/khadas/ljx/abby2_nbg_unify" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>

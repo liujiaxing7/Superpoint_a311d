@@ -1,0 +1,57 @@
+{
+    "Inputs": {
+        "input_27": {
+            "name": "input",
+            "shape": [
+                1,
+                1,
+                400,
+                640
+            ],
+            "format": "nchw",
+            "dtype": "dynamic_fixed_point",
+            "quantize": {
+                "qtype": "i8",
+                "fl": [
+                    7
+                ]
+            }
+        }
+    },
+    "Outputs": {
+        "attach_Conv_Conv_21/out0_0": {
+            "name": "attach_Conv_Conv_21/out0",
+            "shape": [
+                1,
+                65,
+                50,
+                80
+            ],
+            "format": "nchw",
+            "dtype": "dynamic_fixed_point",
+            "quantize": {
+                "qtype": "i8",
+                "fl": [
+                    1
+                ]
+            }
+        },
+        "attach_Conv_Conv_24/out0_1": {
+            "name": "attach_Conv_Conv_24/out0",
+            "shape": [
+                1,
+                256,
+                50,
+                80
+            ],
+            "format": "nchw",
+            "dtype": "dynamic_fixed_point",
+            "quantize": {
+                "qtype": "i8",
+                "fl": [
+                    -3
+                ]
+            }
+        }
+    }
+}

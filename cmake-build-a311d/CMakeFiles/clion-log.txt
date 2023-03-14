@@ -1,0 +1,5 @@
+/usr/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/khadas/ljx/abby2_nbg_unify
+-- [*] searching file: *.h;*.cpp;*.cc;*.hpp
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/khadas/ljx/abby2_nbg_unify/cmake-build-a311d
