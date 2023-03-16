@@ -14,6 +14,9 @@
 #include <time.h>
 #elif defined(_WIN32)
 #include <windows.h>
+#include <vector>
+#include <cmath>
+
 #endif
 
 #define _BASETSD_H
@@ -28,9 +31,15 @@
 
 #include <opencv2/opencv.hpp> // opencv
 
+#include <sstream>
+#include <dirent.h>
+#include <SpRun.h>
+#include <Tracker.h>
+
 #define INPUT_META_NUM 1
 #define RELEASE(x) {if(nullptr != (x)) free((x)); (x) = nullptr;}
 static vnn_input_meta_t input_meta_tab[INPUT_META_NUM];
+const std::string SUFFIX_IMAGE = "png bmp tiff tif jpg jpeg PNG JPG JPEG";
 /*-------------------------------------------
         Macros and Variables
 -------------------------------------------*/
@@ -386,9 +395,19 @@ vsi_status vnnPreProcessFromMat(vsi_nn_graph_t *graph, cv::Mat img)
     return status;
 }
 
-static vsi_status vnn_PreProcessNeuralNetworkSuperponit(vsi_nn_graph_t *graph, cv::Mat image)
+vsi_status vnn_PreProcessNeuralNetworkSuperponit(vsi_nn_graph_t *graph, cv::Mat dst)
 {
-    return vnnPreProcessFromMat(graph, image);
+    dst /= 255.0f;
+
+    _load_input_meta();
+    using TYPE = uint8_t;
+    TYPE *src = (TYPE *) dst.data;
+    vsi_status status = _handle_multiple_inputs(graph, src);
+    TEST_CHECK_STATUS(status, final);
+
+    status = VSI_SUCCESS;
+    final:
+    return status;
 }
 
 static vsi_nn_graph_t *vnn_CreateNeuralNetwork
@@ -416,6 +435,182 @@ final:
 /*-------------------------------------------
                   Main Functions
 -------------------------------------------*/
+template <class T>
+uint64 Multiple(const T* data, const uint size)
+{
+    uint64 mul = 1;
+
+    for (int i = 0; i < size; i++)
+    {
+        mul *= data[i];
+    }
+
+    return mul;
+}
+
+vsi_status GetOutput(vsi_nn_graph_t *graph, vsi_nn_tensor_t *tensor, Array& array)
+{
+    vsi_status status = VSI_FAILURE;
+    array.dims = std::vector<uint>(std::begin(tensor->attr.size), std::begin(tensor->attr.size) + tensor->attr.dim_num);
+    uint64 size = Multiple(tensor->attr.size, tensor->attr.dim_num);
+    uint stride = vsi_nn_TypeGetBytes(tensor->attr.dtype.vx_type);
+    uint8_t *tensor_data = (uint8_t *)vsi_nn_ConvertTensorToData(graph, tensor);
+    array.data = (float *)malloc(sizeof(float) * size);
+
+    for(uint i = 0; i < size; i++)
+    {
+        status = vsi_nn_DtypeToFloat32(&tensor_data[stride * i], &array.data[i], &tensor->attr.dtype);
+    }
+
+    if(tensor_data) vsi_nn_Free(tensor_data);
+
+    return status;
+
+}
+void Array::Release()
+{
+    RELEASE(data);
+}
+
+Array::~Array()
+{
+    Release();
+}
+vsi_status PostProcess(vsi_nn_graph_t *graph, cv::Mat img){
+    vsi_status status = VSI_FAILURE;
+
+    Array semi, coarse_desc;
+    int outpixNum = 80 * 50;
+
+
+    status = GetOutput(graph, vsi_nn_GetTensor(graph, graph->output.tensors[0]), semi);
+    status |= GetOutput(graph, vsi_nn_GetTensor(graph, graph->output.tensors[1]), coarse_desc);
+
+    float*** locresult = new float** [1];
+    float*** descresult = new float** [1];
+
+    long long loc_channel = 65;
+    long long desc_channel = 256;
+    long long width = 640;
+    long long height = 400;
+
+
+    locresult[0] = new float* [loc_channel];
+    descresult[0] = new float* [desc_channel];
+
+    for (size_t chanIdx = 0; chanIdx < loc_channel; ++chanIdx)
+    {
+        // float* single_loc_result_t = new float[outpixNum];
+        locresult[0][chanIdx] = &semi.data[loc_channel * chanIdx];
+    }
+
+    for (size_t chanIdx = 0; chanIdx < desc_channel; ++chanIdx)
+    {
+        // float* single_desc_result_t = new float[outpixNum];
+        descresult[0][chanIdx] = &coarse_desc.data[desc_channel * chanIdx];
+    }
+
+    SpRun* sp = new SpRun(loc_channel, desc_channel, outpixNum, width, height);
+    std::cout << " SpRun start " << std::endl;
+
+//    input     - [640, 400, 1, 1]
+//    output    - [80, 50, 256, 1]
+//    [80, 50, 65, 1]
+
+    //top img
+    // locresult_t : (1, loc_channel, outpixNum)  #(1, 256, 50*80)
+    float*** locresult_t = new float** [1];
+    locresult_t[0] = locresult[0];
+
+    // descresult_t : (1, desc_channel, outpixNum)  #(1, 65, 50*80)
+    float*** descresult_t = new float** [1];
+    descresult_t[0] = descresult[0];
+
+    sp->calc(locresult_t, descresult_t, img);
+    long long top_count = sp->get_count();
+
+    //top_pts : (2, top_count) -> 应用 nms 并保存 x,y 坐标，根据分数降序排列
+    long long** top_pts = new long long* [2];
+    long long* top_pts_x = new long long[top_count];
+    long long* top_pts_y = new long long[top_count];
+    top_pts[0] = top_pts_y;
+    top_pts[1] = top_pts_x;
+
+    //top_score : (top_count) -> 应用nms，存储降序排列的分数
+    double* top_score = new double[top_count];
+
+    //top_pts : (desc_channel, top_count)
+    double** top_desc = new double* [desc_channel];
+    for (size_t i = 0; i < desc_channel; i++) {
+        double* top_desc_ = new double[top_count];
+        top_desc[i] = top_desc_;
+    }
+    sp->get_sp_result(top_pts, top_score, top_desc);
+
+    return VSI_SUCCESS;
+}
+
+std::string GetSuffix(const char *fileName)
+{
+    const char SEPARATOR = '.';
+    char buff[32] = {0};
+
+    const char *ptr = strrchr(fileName, SEPARATOR);
+
+    if (nullptr == ptr) return "";
+
+    uint32_t pos = ptr - fileName;
+    uint32_t n = strlen(fileName) - (pos + 1);
+    strncpy(buff, fileName + (pos + 1), n);
+
+    return buff;
+}
+
+bool IsIMAGE(const char *fileName)
+{
+    std::string suffix = GetSuffix(fileName);
+
+    if (suffix.empty()) return false;
+    return SUFFIX_IMAGE.find(suffix) != std::string::npos;
+}
+
+
+
+void Walk(const std::string& path, const std::string suffixList
+        , std::vector<std::string>& fileList)
+{
+    DIR *dir;
+    dir = opendir(path.c_str());
+    struct dirent *ent;
+    if (nullptr == dir)
+    {
+        std::cout << "failed to open file " << path << std::endl;
+        return;
+    }
+
+    while ((ent = readdir(dir)) != nullptr)
+    {
+        auto name = std::string(ent->d_name);
+
+        // ignore "." ".."
+        if (name.size() < 4) continue;
+
+        std::string suffix = GetSuffix(name.c_str());
+
+        if (!suffix.empty() && suffixList.find(suffix) != std::string::npos)
+        {
+            fileList.emplace_back(path + "/" + name);
+        }
+        else
+        {
+            Walk(path + "/" + name, suffixList, fileList);
+        }
+
+    }
+
+    closedir(dir);
+}
+
 int main
     (
     int argc,
@@ -431,43 +626,51 @@ int main
         printf("Usage: %s data_file inputs...\n", argv[0]);
         return -1;
     }
-    int width = 640;
-    int height = 400;
-    int channel = 1;
-
-    // 加载输入图像
-//    cv::Mat image = cv::imread("test.png");
-//    cv::cvtColor(image, image, cv::COLOR_BGR2GRAY);
-//    cv::resize(image, image, cv::Size(640, 480));
 
     data_name = (const char *)argv[1];
-    char *image_name = argv[2];
-    cv::Mat dst;
-    cv::Mat orig_img = cv::imread(image_name, cv::IMREAD_GRAYSCALE);
-    cv::resize(orig_img, dst, cv::Size(width, height));
 
+    std::vector<std::string> imageFiles({});
+    char *path = (argv + 2)[0];
 
-    using TYPE = uint8_t;
-    TYPE *src = (TYPE *) dst.data;
-
-    /* Create the neural network */
+    if (IsIMAGE(path))
+    {
+        imageFiles.emplace_back(path);
+    }
+    else
+    {
+        Walk(path, SUFFIX_IMAGE, imageFiles);
+    }
     graph = vnn_CreateNeuralNetwork( data_name );
     TEST_CHECK_PTR( graph, final );
 
-//    status = vsi_nn_VerifyGraph(graph);
-//    TEST_CHECK_STATUS( status, final );
+    for (const auto &file : imageFiles)
+    {
+        int width = 640;
+        int height = 400;
+        int channel = 1;
+        cv::Mat dst;
+        cv::Mat orig_img = cv::imread(file, 1);
+        cv::resize(orig_img, dst, cv::Size(width, height));
 
-    /* Pre process the image data */
-   status = vnn_PreProcessNeuralNetworkSuperponit( graph, orig_img);
-   TEST_CHECK_STATUS( status, final );
+        /* Pre process the image data */
+        status = vnn_PreProcessNeuralNetworkSuperponit( graph, dst);
+        TEST_CHECK_STATUS( status, final );
 
-    /* Verify graph */
-    status = vnn_VerifyGraph( graph );
-    TEST_CHECK_STATUS( status, final);
-//
-//    /* Process graph */
-//    status = vnn_ProcessGraph( graph );
-//    TEST_CHECK_STATUS( status, final );
+        /* Verify graph */
+        status = vnn_VerifyGraph( graph );
+        TEST_CHECK_STATUS( status, final);
+        //
+        //    /* Process graph */
+        status = vnn_ProcessGraph( graph );
+        TEST_CHECK_STATUS( status, final );
+
+        status = PostProcess(graph, dst);
+        TEST_CHECK_STATUS( status, final );
+
+    }
+
+
+
 //
 //    if(VNN_APP_DEBUG)
 //    {

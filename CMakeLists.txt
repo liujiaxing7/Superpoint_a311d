@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(abby2_nbg_unify LANGUAGES CXX C)
+project(Superpoint_a311d LANGUAGES CXX C)
 
 set(CMAKE_C_STANDARD 99)
 

@@ -9,10 +9,11 @@
 #define _VNN_SUPERPOINTV1_H
 
 #ifdef __cplusplus
-extern "C"{
+
 #endif
 
 #include "vsi_nn_pub.h"
+#include <vector>
 
 #define VNN_APP_DEBUG (FALSE)
 #define VNN_VERSION_MAJOR 1
@@ -23,6 +24,16 @@ extern "C"{
 
 _version_assert(VNN_RUNTIME_VERSION <= VSI_NN_VERSION,
                 CASE_VERSION_is_higher_than_OVXLIB_VERSION)
+
+
+struct Array
+{
+    float* data = nullptr;
+    std::vector<uint> dims{};
+
+    ~Array();
+    void Release();
+};
 
 void vnn_ReleaseSuperpointV1
     (
@@ -41,7 +52,7 @@ vsi_nn_graph_t * vnn_CreateSuperpointV1
     );
 
 #ifdef __cplusplus
-}
+
 #endif
 
 #endif

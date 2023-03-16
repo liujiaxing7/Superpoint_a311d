@@ -1,3 +1,0 @@
-/home/khadas/ljx/abby2_nbg_unify/cmake-build-a311d/CMakeFiles/rebuild_cache.dir
-/home/khadas/ljx/abby2_nbg_unify/cmake-build-a311d/CMakeFiles/abby2_nbg_unify.dir
-/home/khadas/ljx/abby2_nbg_unify/cmake-build-a311d/CMakeFiles/edit_cache.dir

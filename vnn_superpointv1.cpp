@@ -91,31 +91,27 @@
 /*-------------------------------------------
                   Functions
  -------------------------------------------*/
-static uint8_t* load_data
-    (
-    FILE  * fp,
-    size_t  ofst,
-    size_t  sz
-    )
-{
-    uint8_t* data;
+static uint8_t *load_data
+        (
+                FILE *fp,
+                size_t ofst,
+                size_t sz
+        ) {
+    uint8_t *data;
     int32_t ret;
     data = NULL;
-    if( NULL == fp )
-    {
+    if (NULL == fp) {
         return NULL;
     }
 
     ret = fseek(fp, ofst, SEEK_SET);
-    if (ret != 0)
-    {
+    if (ret != 0) {
         VSILOGE("blob seek failure.");
         return NULL;
     }
 
-    data = (uint8_t*)malloc(sz);
-    if (data == NULL)
-    {
+    data = (uint8_t *) malloc(sz);
+    if (data == NULL) {
         VSILOGE("buffer malloc failure.");
         return NULL;
     }
@@ -123,64 +119,59 @@ static uint8_t* load_data
     return data;
 } /* load_data() */
 
-vsi_nn_graph_t * vnn_CreateSuperpointV1
-    (
-    const char * data_file_name,
-    vsi_nn_context_t in_ctx,
-    const vsi_nn_preprocess_map_element_t * pre_process_map,
-    uint32_t pre_process_map_count,
-    const vsi_nn_postprocess_map_element_t * post_process_map,
-    uint32_t post_process_map_count
-    )
-{
-    vsi_status              status;
-    vsi_bool                release_ctx;
-    vsi_nn_context_t        ctx;
-    vsi_nn_graph_t *        graph;
-    vsi_nn_node_t *         node[NET_NODE_NUM];
-    vsi_nn_tensor_id_t      norm_tensor[NET_NORM_TENSOR_NUM];
-    
-    vsi_nn_tensor_attr_t    attr;
-    FILE *                  fp;
-    uint8_t *               data;
-    uint32_t                i = 0;
-    char *                  use_img_process_s;
-    int32_t                 enable_pre_post_process = 0;
+vsi_nn_graph_t *vnn_CreateSuperpointV1
+        (
+                const char *data_file_name,
+                vsi_nn_context_t in_ctx,
+                const vsi_nn_preprocess_map_element_t *pre_process_map,
+                uint32_t pre_process_map_count,
+                const vsi_nn_postprocess_map_element_t *post_process_map,
+                uint32_t post_process_map_count
+        ) {
+    vsi_status status;
+    vsi_bool release_ctx;
+    vsi_nn_context_t ctx;
+    vsi_nn_graph_t *graph;
+    vsi_nn_node_t *node[NET_NODE_NUM];
+    vsi_nn_tensor_id_t norm_tensor[NET_NORM_TENSOR_NUM];
 
+    vsi_nn_tensor_attr_t attr;
+    FILE *fp;
+    uint8_t *data;
+    uint32_t i = 0;
+    char *use_img_process_s;
+    int32_t enable_pre_post_process = 0;
 
+    vsi_bool input, output;
+    vsi_status ret;
 
-
-
-    ctx = NULL;
-    graph = NULL;
+    ctx = nullptr;
+    graph = nullptr;
     status = VSI_FAILURE;
-    memset( &attr, 0, sizeof( attr ) );
+    memset(&attr, 0, sizeof(attr));
 
-    fp = fopen( data_file_name, "rb" );
-    if( NULL == fp )
-    {
-        VSILOGE( "Open file %s failed.", data_file_name );
+    fp = fopen(data_file_name, "rb");
+    if (nullptr == fp) {
+        VSILOGE("Open file %s failed.", data_file_name);
         goto error;
     }
 
-    if( NULL == in_ctx )
-    {
+    if (nullptr == in_ctx) {
         ctx = vsi_nn_CreateContext();
-    }
-    else
-    {
+    } else {
         ctx = in_ctx;
     }
 
-    graph = vsi_nn_CreateGraph( ctx, NET_TOTAL_TENSOR_NUM, NET_NODE_NUM );
-    if( NULL == graph )
-    {
-        VSILOGE( "Create graph fail." );
+    graph = vsi_nn_CreateGraph(ctx, NET_TOTAL_TENSOR_NUM, NET_NODE_NUM);
+    if (nullptr == graph) {
+        VSILOGE("Create graph fail.");
         goto error;
     }
-    vsi_nn_SetGraphVersion( graph, VNN_VERSION_MAJOR, VNN_VERSION_MINOR, VNN_VERSION_PATCH );
-    vsi_nn_SetGraphInputs( graph, NULL, 1 );
-    vsi_nn_SetGraphOutputs( graph, NULL, 2 );
+    ret = vsi_nn_SetGraphVersion(graph, VNN_VERSION_MAJOR, VNN_VERSION_MINOR, VNN_VERSION_PATCH);
+    if (VSI_SUCCESS == ret) {
+        input = vsi_nn_SetGraphInputs(graph, NULL, 1);
+        output = vsi_nn_SetGraphOutputs(graph, NULL, 2);
+    }
 
 /*-----------------------------------------
   Register client ops
@@ -261,86 +252,73 @@ vsi_nn_graph_t * vnn_CreateSuperpointV1
     graph->input.tensors[0] = norm_tensor[2];
 
 
-    use_img_process_s = getenv( "VSI_USE_IMAGE_PROCESS" );
-    if( use_img_process_s )
-    {
+    use_img_process_s = getenv("VSI_USE_IMAGE_PROCESS");
+    if (use_img_process_s) {
         enable_pre_post_process = atoi(use_img_process_s);
     }
-    if( enable_pre_post_process )
-    {
-        if( pre_process_map_count > 0 )
-        {
-            for( i = 0; i < pre_process_map_count; i++ )
-            {
+    if (enable_pre_post_process) {
+        if (pre_process_map_count > 0) {
+            for (i = 0; i < pre_process_map_count; i++) {
                 status = vsi_nn_AddGraphPreProcess(graph, pre_process_map[i].graph_input_idx,
                                                    pre_process_map[i].preprocesses,
                                                    pre_process_map[i].preprocess_count);
-                TEST_CHECK_STATUS( status, error );
+                TEST_CHECK_STATUS(status, error);
             }
         }
 
-        if( post_process_map_count > 0 )
-        {
-            for( i = 0; i < post_process_map_count; i++ )
-            {
-                 status = vsi_nn_AddGraphPostProcess(graph, post_process_map[i].graph_output_idx,
-                                                     post_process_map[i].postprocesses,
-                                                     post_process_map[i].postprocess_count);
-                 TEST_CHECK_STATUS( status, error );
+        if (post_process_map_count > 0) {
+            for (i = 0; i < post_process_map_count; i++) {
+                status = vsi_nn_AddGraphPostProcess(graph, post_process_map[i].graph_output_idx,
+                                                    post_process_map[i].postprocesses,
+                                                    post_process_map[i].postprocess_count);
+                TEST_CHECK_STATUS(status, error);
             }
         }
 
-        status = vsi_nn_SetupGraph( graph, TRUE );
-        TEST_CHECK_STATUS( status, error );
-    }
-    else
-    {
-        status = vsi_nn_SetupGraph( graph, FALSE );
-        TEST_CHECK_STATUS( status, error );
+        status = vsi_nn_SetupGraph(graph, TRUE);
+        TEST_CHECK_STATUS(status, error);
+    } else {
+        status = vsi_nn_SetupGraph(graph, FALSE);
+        TEST_CHECK_STATUS(status, error);
     }
 
-    if( VSI_FAILURE == status )
-    {
+    if (VSI_FAILURE == status) {
         goto error;
     }
 
-    fclose( fp );
+    fclose(fp);
 
     return graph;
 
-error:
-    if( NULL != fp )
-    {
-        fclose( fp );
+    error:
+    if (NULL != fp) {
+        fclose(fp);
     }
 
-    release_ctx = ( NULL == in_ctx );
-    vsi_nn_DumpGraphToJson( graph );
-    vnn_ReleaseSuperpointV1( graph, release_ctx );
+    release_ctx = (NULL == in_ctx);
+    vsi_nn_DumpGraphToJson(graph);
+    vnn_ReleaseSuperpointV1(graph, release_ctx);
 
     return NULL;
 } /* vsi_nn_CreateSuperpointV1() */
 
 void vnn_ReleaseSuperpointV1
-    (
-    vsi_nn_graph_t * graph,
-    vsi_bool release_ctx
-    )
-{
+        (
+                vsi_nn_graph_t *graph,
+                vsi_bool release_ctx
+        ) {
     vsi_nn_context_t ctx;
-    if( NULL != graph )
-    {
+    if (NULL != graph) {
         ctx = graph->ctx;
-        vsi_nn_ReleaseGraph( &graph );
+        vsi_nn_ReleaseGraph(&graph);
 
         /*-----------------------------------------
         Unregister client ops
         -----------------------------------------*/
-        
 
-        if( release_ctx )
-        {
-            vsi_nn_ReleaseContext( &ctx );
+
+        if (release_ctx) {
+            vsi_nn_ReleaseContext(&ctx);
         }
     }
 } /* vsi_nn_ReleaseSuperpointV1() */
